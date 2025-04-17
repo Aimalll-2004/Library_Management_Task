@@ -2,15 +2,54 @@
 
 window.onload = function () {
     const params = getQueryParams();
-    const file = params['file'];
+    const entity = params['entity'];
     const id = params['id'];
 
-    if (file && id) {
-        displayEntity(file, id);
+    if (entity && id) {
+        viewEntity(entity, id);
     } else {
         document.getElementById('content').innerHTML = '<p>Invalid parameters.</p>';
     }
 };
+
+
+function viewEntity(entity, id){
+    fetch("http://127.0.0.1:5001/api/display_entity", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ entity: entity, id: id })
+    })
+    .then(response => response.json())
+    .then(data => {
+        let html = `<h1>${entity} Details</h1><ul>`;
+        for (const key in data) {
+            html += `<li><strong>${key}:</strong> ${data[key]}</li>`;
+        }
+        html += "</ul>";
+
+        document.getElementById('content').innerHTML = html;
+
+        // If there's a name/title, fetch Gemini description
+        const name = data.Name || data.Title;
+        if (name) {
+            fetchGeminiDescription(name);
+        }
+    })
+    .catch(error => {
+        console.error("Error displaying entity:", error);
+        document.getElementById('content').innerHTML = `<p>Error loading entity.</p>`;
+    });
+}
+
+
+
+
+
+
+
+
 
 /**
  * Function to retrieve query parameters from the URL.
@@ -65,193 +104,193 @@ async function fetchGeminiDescription(entityName) {
     }
 }
 
-/**
- * Asynchronously fetches and parses an XML file.
- * @param {string} filePath - The relative path to the XML file.
- * @returns {Promise<Document>} A promise that resolves to the parsed XML Document.
- */
-async function fetchXML(filePath) {
-    try {
-        const response = await fetch(`/static/data/${filePath}`);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch ${filePath}: ${response.statusText}`);
-        }
-        const textData = await response.text();
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(textData, "application/xml");
+// /**
+//  * Asynchronously fetches and parses an XML file.
+//  * @param {string} filePath - The relative path to the XML file.
+//  * @returns {Promise<Document>} A promise that resolves to the parsed XML Document.
+//  */
+// async function fetchXML(filePath) {
+//     try {
+//         const response = await fetch(`/static/data/${filePath}`);
+//         if (!response.ok) {
+//             throw new Error(`Failed to fetch ${filePath}: ${response.statusText}`);
+//         }
+//         const textData = await response.text();
+//         const parser = new DOMParser();
+//         const xmlDoc = parser.parseFromString(textData, "application/xml");
         
-        // Check for parsing errors
-        const parserError = xmlDoc.getElementsByTagName("parsererror");
-        if (parserError.length > 0) {
-            throw new Error(`Error parsing ${filePath}`);
-        }
+//         // Check for parsing errors
+//         const parserError = xmlDoc.getElementsByTagName("parsererror");
+//         if (parserError.length > 0) {
+//             throw new Error(`Error parsing ${filePath}`);
+//         }
 
-        return xmlDoc;
-    } catch (error) {
-        console.error(`Error fetching/parsing ${filePath}:`, error);
-        throw error;
-    }
-}
+//         return xmlDoc;
+//     } catch (error) {
+//         console.error(`Error fetching/parsing ${filePath}:`, error);
+//         throw error;
+//     }
+// }
 
-/**
- * Parses entities from an XML Document.
- * @param {Document} xmlDoc - The parsed XML Document.
- * @param {string} entityName - The tag name of the entities to parse (e.g., 'Author', 'Publisher').
- * @returns {Object} An object mapping entity IDs to their names.
- */
-function parseEntities(xmlDoc, entityName) {
-    const entities = {};
-    const elements = xmlDoc.getElementsByTagName(entityName);
-    for (let i = 0; i < elements.length; i++) {
-        const element = elements[i];
-        const id = element.getAttribute('id');
-        const nameElement = element.getElementsByTagName('Name')[0];
-        const name = nameElement ? nameElement.textContent : 'Unknown';
-        entities[id] = name;
-    }
-    return entities;
-}
+// /**
+//  * Parses entities from an XML Document.
+//  * @param {Document} xmlDoc - The parsed XML Document.
+//  * @param {string} entityName - The tag name of the entities to parse (e.g., 'Author', 'Publisher').
+//  * @returns {Object} An object mapping entity IDs to their names.
+//  */
+// function parseEntities(xmlDoc, entityName) {
+//     const entities = {};
+//     const elements = xmlDoc.getElementsByTagName(entityName);
+//     for (let i = 0; i < elements.length; i++) {
+//         const element = elements[i];
+//         const id = element.getAttribute('id');
+//         const nameElement = element.getElementsByTagName('Name')[0];
+//         const name = nameElement ? nameElement.textContent : 'Unknown';
+//         entities[id] = name;
+//     }
+//     return entities;
+// }
 
-/**
- * Displays the details of a specific entity based on the provided file and ID.
- * @param {string} file - The XML file to fetch (e.g., 'books.xml', 'authors.xml').
- * @param {string} id - The ID of the entity to display.
- */
-async function displayEntity(file, id) {
-    try {
-        // Fetch and parse the main XML file
-        const mainDoc = await fetchXML(file);
+// /**
+//  * Displays the details of a specific entity based on the provided file and ID.
+//  * @param {string} file - The XML file to fetch (e.g., 'books.xml', 'authors.xml').
+//  * @param {string} id - The ID of the entity to display.
+//  */
+// async function displayEntity(file, id) {
+//     try {
+//         // Fetch and parse the main XML file
+//         const mainDoc = await fetchXML(file);
         
-        // Select the entity by its ID
-        const entity = mainDoc.querySelector(`[id='${id}']`);
-        if (!entity) {
-            document.getElementById('content').innerHTML = '<p>Entity not found.</p>';
-            return;
-        }
+//         // Select the entity by its ID
+//         const entity = mainDoc.querySelector(`[id='${id}']`);
+//         if (!entity) {
+//             document.getElementById('content').innerHTML = '<p>Entity not found.</p>';
+//             return;
+//         }
 
-        // Determine the entity type based on the entity's localName
-        const entityType = entity.localName;
+//         // Determine the entity type based on the entity's localName
+//         const entityType = entity.localName;
 
-        // Initialize variables for linked entities
-        let authors = {};
-        let publishers = {};
-        let genres = {};
-        let books = {};
+//         // Initialize variables for linked entities
+//         let authors = {};
+//         let publishers = {};
+//         let genres = {};
+//         let books = {};
 
-        // Collect linked files from child elements
-        const linkedFiles = new Set();
-        let entityName = '';
+//         // Collect linked files from child elements
+//         const linkedFiles = new Set();
+//         let entityName = '';
 
-        for (let i = 0; i < entity.children.length; i++) {
-            const child = entity.children[i];
-            const xlinkHref = child.getAttribute('xlink:href');
-            if (xlinkHref) {
-                const [filePath, linkedId] = xlinkHref.split('#');
-                linkedFiles.add(filePath);
-            } else if (child.localName === 'Title' || child.localName === 'Name') {
-                entityName = child.textContent; // Get the entity name to pass to Gemini
-            }
-        }
+//         for (let i = 0; i < entity.children.length; i++) {
+//             const child = entity.children[i];
+//             const xlinkHref = child.getAttribute('xlink:href');
+//             if (xlinkHref) {
+//                 const [filePath, linkedId] = xlinkHref.split('#');
+//                 linkedFiles.add(filePath);
+//             } else if (child.localName === 'Title' || child.localName === 'Name') {
+//                 entityName = child.textContent; // Get the entity name to pass to Gemini
+//             }
+//         }
 
-        // Fetch and parse linked XML files
-        const linkedPromises = Array.from(linkedFiles).map(filePath => fetchXML(filePath));
-        const linkedDocs = await Promise.all(linkedPromises);
+//         // Fetch and parse linked XML files
+//         const linkedPromises = Array.from(linkedFiles).map(filePath => fetchXML(filePath));
+//         const linkedDocs = await Promise.all(linkedPromises);
 
-        // Parse linked entities
-        linkedDocs.forEach(doc => {
-            const rootName = doc.documentElement.localName;
-            if (rootName === 'Authors') {
-                authors = { ...authors, ...parseEntities(doc, 'Author') };
-            } else if (rootName === 'Publishers') {
-                publishers = { ...publishers, ...parseEntities(doc, 'Publisher') };
-            } else if (rootName === 'Genres') {
-                genres = { ...genres, ...parseEntities(doc, 'Genre') };
-            } else if (rootName === 'Books') {
-                books = { ...books, ...parseEntities(doc, 'Book') };
-            }
-        });
+//         // Parse linked entities
+//         linkedDocs.forEach(doc => {
+//             const rootName = doc.documentElement.localName;
+//             if (rootName === 'Authors') {
+//                 authors = { ...authors, ...parseEntities(doc, 'Author') };
+//             } else if (rootName === 'Publishers') {
+//                 publishers = { ...publishers, ...parseEntities(doc, 'Publisher') };
+//             } else if (rootName === 'Genres') {
+//                 genres = { ...genres, ...parseEntities(doc, 'Genre') };
+//             } else if (rootName === 'Books') {
+//                 books = { ...books, ...parseEntities(doc, 'Book') };
+//             }
+//         });
 
-        // Build the HTML content
-        let htmlContent = `<h1>${entityType} Details</h1><ul>`;
+//         // Build the HTML content
+//         let htmlContent = `<h1>${entityType} Details</h1><ul>`;
 
-        for (let i = 0; i < entity.children.length; i++) {
-            const child = entity.children[i];
-            const childName = child.localName;
-            const childText = child.textContent;
-            const xlinkHref = child.getAttribute('xlink:href');
+//         for (let i = 0; i < entity.children.length; i++) {
+//             const child = entity.children[i];
+//             const childName = child.localName;
+//             const childText = child.textContent;
+//             const xlinkHref = child.getAttribute('xlink:href');
 
-            if (xlinkHref) {
-                const [filePath, linkedId] = xlinkHref.split('#');
-                let linkedEntityType = '';
+//             if (xlinkHref) {
+//                 const [filePath, linkedId] = xlinkHref.split('#');
+//                 let linkedEntityType = '';
 
-                switch (filePath) {
-                    case 'authors.xml':
-                        linkedEntityType = 'Author';
-                        break;
-                    case 'publishers.xml':
-                        linkedEntityType = 'Publisher';
-                        break;
-                    case 'genres.xml':
-                        linkedEntityType = 'Genre';
-                        break;
-                    case 'books.xml':
-                        linkedEntityType = 'Book';
-                        break;
-                    default:
-                        linkedEntityType = 'Unknown';
-                }
+//                 switch (filePath) {
+//                     case 'authors.xml':
+//                         linkedEntityType = 'Author';
+//                         break;
+//                     case 'publishers.xml':
+//                         linkedEntityType = 'Publisher';
+//                         break;
+//                     case 'genres.xml':
+//                         linkedEntityType = 'Genre';
+//                         break;
+//                     case 'books.xml':
+//                         linkedEntityType = 'Book';
+//                         break;
+//                     default:
+//                         linkedEntityType = 'Unknown';
+//                 }
 
-                // Determine the linked entity's name
-                let linkedName = 'Unknown';
-                if (filePath === 'authors.xml' && authors[linkedId]) {
-                    linkedName = authors[linkedId];
-                } else if (filePath === 'publishers.xml' && publishers[linkedId]) {
-                    linkedName = publishers[linkedId];
-                } else if (filePath === 'genres.xml' && genres[linkedId]) {
-                    linkedName = genres[linkedId];
-                } else if (filePath === 'books.xml' && books[linkedId]) {
-                    linkedName = books[linkedId];
-                }
+//                 // Determine the linked entity's name
+//                 let linkedName = 'Unknown';
+//                 if (filePath === 'authors.xml' && authors[linkedId]) {
+//                     linkedName = authors[linkedId];
+//                 } else if (filePath === 'publishers.xml' && publishers[linkedId]) {
+//                     linkedName = publishers[linkedId];
+//                 } else if (filePath === 'genres.xml' && genres[linkedId]) {
+//                     linkedName = genres[linkedId];
+//                 } else if (filePath === 'books.xml' && books[linkedId]) {
+//                     linkedName = books[linkedId];
+//                 }
 
-                // Create hyperlink to the linked entity
-                htmlContent += `<li><strong>${childName}:</strong> <a href="viewer.html?file=${filePath}&id=${linkedId}" target="_blank">${linkedName}</a></li>`;
-            } else {
-                // Regular text content
-                htmlContent += `<li><strong>${childName}:</strong> ${childText}</li>`;
-            }
-        }
+//                 // Create hyperlink to the linked entity
+//                 htmlContent += `<li><strong>${childName}:</strong> <a href="viewer.html?file=${filePath}&id=${linkedId}" target="_blank">${linkedName}</a></li>`;
+//             } else {
+//                 // Regular text content
+//                 htmlContent += `<li><strong>${childName}:</strong> ${childText}</li>`;
+//             }
+//         }
 
-        htmlContent += '</ul>';
+//         htmlContent += '</ul>';
 
-        // If viewing a Book, display borrowing details
-        if (entityType === 'Book') {
-            const borrowingData = JSON.parse(localStorage.getItem('borrowingData')) || {};
-            const borrowingDetails = borrowingData[id];
+//         // If viewing a Book, display borrowing details
+//         if (entityType === 'Book') {
+//             const borrowingData = JSON.parse(localStorage.getItem('borrowingData')) || {};
+//             const borrowingDetails = borrowingData[id];
 
-            if (borrowingDetails) {
-                htmlContent += `<h2>Borrowing Details</h2><ul>
-                    <li><strong>Borrower:</strong> ${borrowingDetails.borrowerName}</li>
-                    <li><strong>Borrow Date:</strong> ${borrowingDetails.borrowDate}</li>
-                    <li><strong>Return Date:</strong> ${borrowingDetails.returnDate}</li>
-                </ul>`;
-            } else {
-                htmlContent += `<p>This book is currently available for borrowing.</p>`;
-            }
-        }
+//             if (borrowingDetails) {
+//                 htmlContent += `<h2>Borrowing Details</h2><ul>
+//                     <li><strong>Borrower:</strong> ${borrowingDetails.borrowerName}</li>
+//                     <li><strong>Borrow Date:</strong> ${borrowingDetails.borrowDate}</li>
+//                     <li><strong>Return Date:</strong> ${borrowingDetails.returnDate}</li>
+//                 </ul>`;
+//             } else {
+//                 htmlContent += `<p>This book is currently available for borrowing.</p>`;
+//             }
+//         }
 
-        // Add a back link to the main catalog
-        htmlContent += `<a href="/" class="back-link">&larr; Back to Catalog</a>`;
+//         // Add a back link to the main catalog
+//         htmlContent += `<a href="/" class="back-link">&larr; Back to Catalog</a>`;
 
-        // Display the content
-        document.getElementById('content').innerHTML = htmlContent;
+//         // Display the content
+//         document.getElementById('content').innerHTML = htmlContent;
 
-        // Fetch and display the Gemini description (if entityName exists)
-        if (entityName) {
-            fetchGeminiDescription(entityName);
-        }
+//         // Fetch and display the Gemini description (if entityName exists)
+//         if (entityName) {
+//             fetchGeminiDescription(entityName);
+//         }
 
-    } catch (error) {
-        console.error('Error displaying entity:', error);
-        document.getElementById('content').innerHTML = `<p>Error loading entity details.</p>`;
-    }
-}
+//     } catch (error) {
+//         console.error('Error displaying entity:', error);
+//         document.getElementById('content').innerHTML = `<p>Error loading entity details.</p>`;
+//     }
+// }

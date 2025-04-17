@@ -4,8 +4,7 @@ from db.db_connection import db
 customer_book = db.Table('customer_book',
     db.Column('customer_id', db.Integer, db.ForeignKey('Customers.id'), primary_key=True),
     db.Column('book_id', db.Integer, db.ForeignKey('Books.id'), primary_key=True),
-    db.Column('date_borrowed', db.DateTime, nullable=False),
-    db.Column('date_returned', db.DateTime, nullable=True)
+    db.Column('date_borrowed', db.Date, nullable=False),
 )
 
 class Author(db.Model):
@@ -53,6 +52,9 @@ class Book(db.Model):
         return {
             'id': self.id,
             'title': self.title,
+            'author_id': self.author_id,
+            'publisher_id': self.publisher_id,
+            'genre_id': self.genre_id,
             'author': self.author.author_name,
             'publisher': self.publisher.publisher_name,
             'genre': self.genre.genre,

@@ -46,7 +46,12 @@ window.onload = function () {
     //     const books = booksDoc.getElementsByTagName('Book');
     //     const bookTable = document.getElementById('book-table');
     
-    fetch("http://127.0.0.1:5000/api/display_books")
+    fetch("http://127.0.0.1:5001/api/display_books", {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
     .then(respone => respone.json())
     .then(books => {
         // Retrieve borrowing data from LocalStorage
@@ -62,6 +67,9 @@ window.onload = function () {
             books.forEach(book => {
                 const id = book.id
                 const title = book.title
+                const authorId = book.author_id
+                const publisherId = book.publisher_id
+                const genreId = book.genre_id
                 const author = book.author
                 const publisher = book.publisher
                 const genre = book.genre    
@@ -75,27 +83,27 @@ window.onload = function () {
                 const isBorrowed = borrowingData[id] ? true : false;
 
                 // Populate row with book details, including genre
-                row.innerHTML = `<td>${id}</td>
-                <td>${title}</td>
-                <td>${author}</td>
-                <td>${publisher}</td>
-                <td>${genre}</td>
-                <td>${isBorrowed ? borrowingData[id].borrowerName : ''}</td>
-                <td>${isBorrowed ? borrowingData[id].borrowDate : ''}</td>
-                <td>${isBorrowed ? borrowingData[id].returnDate : ''}</td>
-                <td>${isBorrowed ? 'Borrowed' : 'Present'}</td>`;
-                bookTable.appendChild(row);
-
                 // row.innerHTML = `<td>${id}</td>
-                //              <td><a href="viewer.html?file=books.xml&id=${id}" target="_blank">${title}</a></td>
-                //              <td><a href="viewer.html?file=authors.xml&id=${authorId}" target="_blank">${authorName}</a></td>
-                //              <td><a href="viewer.html?file=publishers.xml&id=${publisherId}" target="_blank">${publisherName}</a></td>
-                //              <td><a href="viewer.html?file=genres.xml&id=${genreId}" target="_blank">${genreName}</a></td>
-                //              <td>${isBorrowed ? borrowingData[id].borrowerName : ''}</td>
-                //              <td>${isBorrowed ? borrowingData[id].borrowDate : ''}</td>
-                //              <td>${isBorrowed ? borrowingData[id].returnDate : ''}</td>
-                //              <td>${isBorrowed ? 'Borrowed' : 'Present'}</td>`;
+                // <td>${title}</td>
+                // <td>${author}</td>
+                // <td>${publisher}</td>
+                // <td>${genre}</td>
+                // <td>${isBorrowed ? borrowingData[id].borrowerName : ''}</td>
+                // <td>${isBorrowed ? borrowingData[id].borrowDate : ''}</td>
+                // <td>${isBorrowed ? borrowingData[id].returnDate : ''}</td>
+                // <td>${isBorrowed ? 'Borrowed' : 'Present'}</td>`;
                 // bookTable.appendChild(row);
+
+                row.innerHTML = `<td>${id}</td>
+                             <td><a href="viewer.html?entity=Book&id=${id}" target="_blank">${title}</a></td>
+                             <td><a href="viewer.html?entity=Author&id=${authorId}" target="_blank">${author}</a></td>
+                             <td><a href="viewer.html?entity=Publisher&id=${publisherId}" target="_blank">${publisher}</a></td>
+                             <td><a href="viewer.html?entity=Genre&id=${genreId}" target="_blank">${genre}</a></td>
+                             <td>${isBorrowed ? borrowingData[id].borrowerName : ''}</td>
+                             <td>${isBorrowed ? borrowingData[id].borrowDate : ''}</td>
+                             <td>${isBorrowed ? borrowingData[id].returnDate : ''}</td>
+                             <td>${isBorrowed ? 'Borrowed' : 'Present'}</td>`;
+                bookTable.appendChild(row);
 
 
                 // Populate the appropriate dropdown
@@ -181,12 +189,88 @@ window.onload = function () {
     // //     console.error('Error fetching or parsing XML files:', error);
     // // });
 
+
+    function borrowBook(bookId, borrowerName, borrowDate) {
+        fetch("http://127.0.0.1:5001/api/borrow_book", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                bookId: bookId,
+                borrowerName: borrowerName,
+                borrowDate: borrowDate
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(`Error: ${data.error}`);
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            alert("An error occurred while borrowing the book.");
+        });
+    }
+
+    function returnBook(bookId, returnDate) {
+        fetch("http://127.0.0.1:5001/api/return_book", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                bookId: bookId,
+                returnDate: returnDate
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(`Error: ${data.error}`);
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            alert("An error occurred while returning the book.");
+        });
+    }
+        
+    function clearBorrowingData() {
+        fetch("http://127.0.0.1:5001/api/clear_borrowing_data", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(`Error: ${data.error}`);
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            alert("An error occurred while clearing all borrowing data.");
+        });
+    }
+        
+
+
 // Handle Borrow Form Submission
 document.getElementById('borrowForm').addEventListener('submit', function (event) {
     event.preventDefault();
     const bookId = document.getElementById('borrowBookId').value;
     const borrowerName = document.getElementById('borrowerName').value.trim();
     const borrowDate = document.getElementById('borrowDate').value;
+
 
     if (!bookId || !borrowerName || !borrowDate) {
         alert('Please fill in all fields.');
@@ -197,6 +281,8 @@ document.getElementById('borrowForm').addEventListener('submit', function (event
     if (!confirm(`Are you sure you want to borrow Book ID ${bookId}?`)) {
         return;
     }
+
+    borrowBook(bookId, borrowerName, borrowDate);
 
     const row = document.querySelector(`#book-table tr[data-id="${bookId}"]`);
     if (row) {
@@ -264,6 +350,8 @@ document.getElementById('returnForm').addEventListener('submit', function (event
         return;
     }
 
+    returnBook(bookId, returnDateInput)
+
     const row = document.querySelector(`#book-table tr[data-id="${bookId}"]`);
     if (row) {
         const currentState = row.cells[8].textContent;
@@ -314,6 +402,7 @@ document.getElementById('returnForm').addEventListener('submit', function (event
 // Clear borrowing data from localStorage
 document.getElementById('clearDataBtn').addEventListener('click', function () {
     if (confirm('Are you sure you want to clear all borrowing data? This action cannot be undone.')) {
+        clearBorrowingData()
         localStorage.removeItem('borrowingData'); // Only remove borrowing data
         location.reload(); // Reload the page after clearing the data
     }
