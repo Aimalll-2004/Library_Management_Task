@@ -3,8 +3,15 @@ import configparser
 import requests
 import logging
 from flask_cors import CORS
+from sqlalchemy import select
+from db.db_connection import init_db, db
+from db.models import Author, Publisher, Genre, Book, Customer, customer_book
+
 
 app = Flask(__name__, static_url_path='/static', static_folder='static')
+
+init_db(app)
+
 CORS(app)
 
 # Configure logging to DEBUG level for detailed logs
@@ -39,6 +46,112 @@ def home():
 @app.route('/viewer.html')
 def viewer():
     return render_template('viewer.html')
+
+@app.route("/api/display_books", methods=["GET"])
+def get_all_books():
+    books = Book.query.all()
+    return jsonify([book.to_dict() for book in books])
+
+@app.route("/api/display_entity", methods=["POST"])
+def get_entity():
+    entity_data = request.json
+    entity_id = entity_data.get("id")
+    entity_type = entity_data.get("entity")
+
+    if entity_type == "Author":
+        author = Author.query.get(entity_id)
+        author_name = author.author_name if author else "Author not found"
+        return jsonify({"Author": author_name})
+
+    elif entity_type == "Publisher":
+        publisher = Publisher.query.get(entity_id)
+        publisher_name = publisher.publisher_name if publisher else "Publisher not found"
+        return jsonify({"Publisher":publisher_name})
+
+    elif entity_type == "Genre":
+        genre = Genre.query.get(entity_id)
+        genre_name = genre.genre if genre else "Genre not found"
+        return jsonify({"Genre": genre_name})
+    
+    elif entity_type == "Book":
+        book = Book.query.get(entity_id)
+        return jsonify({"Title":book.title,
+                        "Author":book.author.author_name,
+                        "Publisher":book.publisher.publisher_name,
+                        "Genre":book.genre.genre,
+                        "State":book.state})
+    
+    else:
+        return jsonify({"error": "Invalid entity type"}), 400
+
+@app.route('/api/borrow_book', methods=['POST'])
+def borrow_book():
+    book_id = request.json.get("bookId")
+    book = Book.query.get(book_id)
+    borrower_name = request.json.get("borrowerName")
+    borrow_date = request.json.get("borrowDate")
+
+    customer = Customer.query.filter_by(customer_name=borrower_name).first()
+    if not customer:
+        customer = Customer(customer_name=borrower_name)
+        db.session.add(customer)
+        db.session.commit()
+
+    insert_stmt = customer_book.insert().values(
+        customer_id=customer.id,
+        book_id=book_id,
+        date_borrowed=borrow_date
+    )
+    db.session.execute(insert_stmt)
+
+    book.state = False
+    db.session.commit()
+
+    return jsonify({"message": f"Book ID {book_id} borrowed by {borrower_name} on {borrow_date}."})
+
+
+@app.route('/api/return_book', methods=['POST'])
+def return_book():
+    book_id = request.json.get("bookId")
+    return_date = request.json.get("returnDate")
+
+    book = Book.query.get(book_id)
+
+    result = db.session.execute(
+        select(customer_book.c.customer_id).where(customer_book.c.book_id == book_id)
+    ).first()
+    if result is None:
+        return jsonify({"error": f"No customer found borrowing book ID {book_id}."}), 404
+
+    customer_id = result[0]
+    customer = db.session.get(Customer, customer_id)
+    if not customer:
+        return jsonify({"error": "Customer not found."}), 404
+    customer_name = customer.customer_name
+    
+    assoc_remove_stmt = customer_book.delete().where(customer_book.c.book_id == book_id)
+    db.session.execute(assoc_remove_stmt)
+
+    remaining_books = db.session.execute(
+        select(customer_book.c.book_id).where(customer_book.c.customer_id == customer_id)
+    ).fetchall()
+
+    if not remaining_books:
+        db.session.delete(customer)
+
+    book.state = True
+    db.session.commit()
+
+    return jsonify({"message": f"Book ID {book_id} returned by {customer_name} on {return_date}."})
+
+
+@app.route('/api/clear_borrowing_data', methods=['POST'])
+def clear_borrrowing_data():
+    db.session.execute(customer_book.delete())
+    db.session.query(Customer).delete()
+    db.session.commit()
+    return jsonify({"message": "All borrowing data has been cleared."})
+
 
 # API route to fetch description from Gemini API
 @app.route('/api/description', methods=['GET'])
@@ -120,4 +233,4 @@ def get_description():
         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
