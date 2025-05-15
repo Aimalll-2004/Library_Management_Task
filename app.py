@@ -6,6 +6,7 @@ from flask_cors import CORS
 from sqlalchemy import select
 from db.db_connection import init_db, db
 from db.models import Author, Publisher, Genre, Book, Customer, customer_book
+from neo4j import GraphDatabase
 
 
 app = Flask(__name__, static_url_path='/static', static_folder='static')
@@ -231,6 +232,58 @@ def get_description():
     except Exception as e:
         logging.exception(f"Unexpected error: {e}")
         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
+    
+# neo4j routes
+# connect to neo4j
+neo4j_driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "123456789"))
+
+# get all books 
+@app.route("/api/neo4j/books", methods=["GET"])
+def get_all_books_neo4j():
+    result = neo4j_driver.session().run("MATCH (b:Book) RETURN b.id AS id, b.title AS title, b.state AS state")
+    books = [record.data() for record in result]
+    return jsonify(books)
+
+# get all books by author name
+@app.route("/api/neo4j/books/by_author/<author_name>", methods=["GET"])
+def get_books_by_author_neo4j(author_name):
+    result = neo4j_driver.session().run("""
+        MATCH (a:Author {author_name: $name})<-[:WRITTEN_BY]-(b:Book)
+        RETURN b.id AS id, b.title AS title, b.state AS state
+        """, name=author_name)
+    books = [record.data() for record in result]
+    return jsonify(books)
+
+# get books borrowed by customers
+@app.route("/api/neo4j/borrowed_books/<customer_name>", methods=["GET"])
+def get_borrowed_books_by_customer_neo4j(customer_name):
+    result = neo4j_driver.session().run("""
+        MATCH (c:Customer {customer_name: $name})-[:BORROWED]->(b:Book)
+        RETURN b.id AS id, b.title AS title, b.state AS state
+        """, name=customer_name)
+    books = [record.data() for record in result]
+    return jsonify(books)
+
+# get book details 
+@app.route("/api/neo4j/book_details/<int:book_id>", methods=["GET"])
+def get_book_details_neo4j(book_id):
+    result = neo4j_driver.session().run("""
+        MATCH (b:Book {id: $id})
+        OPTIONAL MATCH (b)-[:WRITTEN_BY]->(a:Author)
+        OPTIONAL MATCH (b)-[:PUBLISHED_BY]->(p:Publisher)
+        OPTIONAL MATCH (b)-[:IN_GENRE]->(g:Genre)
+        RETURN b.title AS title, b.state AS state,
+               a.author_name AS author,
+               p.publisher_name AS publisher,
+               g.genre AS genre
+        """, id=book_id)
+    return jsonify(result.single().data())
+
+@app.teardown_appcontext
+def close_neo4j_driver(exception=None):
+    if neo4j_driver is not None:
+        neo4j_driver.close()
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
