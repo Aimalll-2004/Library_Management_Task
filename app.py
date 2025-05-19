@@ -234,15 +234,119 @@ def get_description():
         return jsonify({'error': 'An unexpected error occurred', 'message': str(e)}), 500
     
 # neo4j routes
-# connect to neo4j
+# Neo4j Connection
 neo4j_driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "123456789"))
 
-# get all books 
-@app.route("/api/neo4j/books", methods=["GET"])
+@app.route("/api/neo4j/display_books", methods=["GET"])
 def get_all_books_neo4j():
-    result = neo4j_driver.session().run("MATCH (b:Book) RETURN b.id AS id, b.title AS title, b.state AS state")
-    books = [record.data() for record in result]
+    with neo4j_driver.session() as session:
+        result = session.run("""
+            MATCH (b:Book)
+            OPTIONAL MATCH (b)-[:WRITTEN_BY]->(a:Author)
+            OPTIONAL MATCH (b)-[:PUBLISHED_BY]->(p:Publisher)
+            OPTIONAL MATCH (b)-[:IN_GENRE]->(g:Genre)
+            RETURN 
+                b.id AS id, 
+                b.title AS title, 
+                b.state AS state,
+                a.id AS author_id,
+                a.author_name AS author,
+                p.id AS publisher_id,
+                p.publisher_name AS publisher,
+                g.id AS genre_id,
+                g.genre AS genre
+        """)
+        books = [record.data() for record in result]
     return jsonify(books)
+
+@app.route("/api/neo4j/display_entity", methods=["POST"])
+def get_entity_neo4j():
+    data = request.json
+    entity = data.get("entity")
+    entity_id = int(data.get("id"))
+
+    with neo4j_driver.session() as session:
+        if entity == "Book":
+            result = session.run("""
+                MATCH (b:Book {id: $id})
+                OPTIONAL MATCH (b)-[:WRITTEN_BY]->(a:Author)
+                OPTIONAL MATCH (b)-[:PUBLISHED_BY]->(p:Publisher)
+                OPTIONAL MATCH (b)-[:IN_GENRE]->(g:Genre)
+                RETURN b.title AS Title, b.state AS State,
+                       a.author_name AS Author,
+                       p.publisher_name AS Publisher,
+                       g.genre AS Genre
+            """, id=entity_id)
+        elif entity == "Author":
+            result = session.run("MATCH (a:Author {id: $id}) RETURN a.author_name AS Author", id=entity_id)
+        elif entity == "Publisher":
+            result = session.run("MATCH (p:Publisher {id: $id}) RETURN p.publisher_name AS Publisher", id=entity_id)
+        elif entity == "Genre":
+            result = session.run("MATCH (g:Genre {id: $id}) RETURN g.genre AS Genre", id=entity_id)
+        else:
+            return jsonify({"error": "Invalid entity type"}), 400
+
+        record = result.single()
+        if not record:
+            return jsonify({"error": f"{entity} not found"}), 404
+        return jsonify(record.data())
+
+@app.route("/api/neo4j/borrow_book", methods=["POST"])
+def borrow_book_neo4j():
+    data = request.json
+    book_id = data.get("bookId")
+    borrower_name = data.get("borrowerName")
+    borrow_date = data.get("borrowDate")
+
+    with neo4j_driver.session() as session:
+        session.run("""
+            MERGE (c:Customer {customer_name: $name})
+            WITH c
+            MATCH (b:Book {id: $book_id})
+            MERGE (c)-[:BORROWED {date_borrowed: date($borrow_date)}]->(b)
+            SET b.state = false
+        """, name=borrower_name, book_id=int(book_id), borrow_date=borrow_date)
+
+    return jsonify({"message": f"Book ID {book_id} borrowed by {borrower_name} on {borrow_date}."})
+
+@app.route("/api/neo4j/return_book", methods=["POST"])
+def return_book_neo4j():
+    data = request.json
+    book_id = data.get("bookId")
+    return_date = data.get("returnDate")  # Not stored in Neo4j but accepted
+
+    with neo4j_driver.session() as session:
+        session.run("""
+            MATCH (c:Customer)-[r:BORROWED]->(b:Book {id: $book_id})
+            DELETE r
+            SET b.state = true
+        """, book_id=int(book_id))
+
+    return jsonify({"message": f"Book ID {book_id} has been returned."})
+
+@app.route("/api/neo4j/clear_borrowing_data", methods=["POST"])
+def clear_borrowing_data_neo4j():
+    with neo4j_driver.session() as session:
+        # Delete all BORROWED relationships
+        session.run("""
+            MATCH (:Customer)-[r:BORROWED]->(:Book)
+            DELETE r
+        """)
+        
+        # Delete customers who no longer have any BORROWED edges
+        session.run("""
+            MATCH (c:Customer)
+            WHERE NOT (c)-[:BORROWED]->()
+            DELETE c
+        """)
+        
+        # Reset all books to state=true (available)
+        session.run("""
+            MATCH (b:Book)
+            SET b.state = true
+        """)
+    
+    return jsonify({"message": "All Neo4j borrowing data has been cleared."})
 
 # get all books by author name
 @app.route("/api/neo4j/books/by_author/<author_name>", methods=["GET"])
@@ -279,6 +383,7 @@ def get_book_details_neo4j(book_id):
         """, id=book_id)
     return jsonify(result.single().data())
 
+# End neo4j connection
 @app.teardown_appcontext
 def close_neo4j_driver(exception=None):
     if neo4j_driver is not None:

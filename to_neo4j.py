@@ -29,7 +29,7 @@ def insert_publishers():
 # insert genre nodes
 def insert_genres():
     for genre in session.query(Genre).all():
-        driver.session().run("MERGE (:Genre {id: $id, genre: $name})", id=genre.id, name=genre.genre)  # ✅ fixed: added .session()
+        driver.session().run("MERGE (:Genre {id: $id, genre: $name})", id=genre.id, name=genre.genre)
 
 # insert customer nodes
 def insert_customers():
