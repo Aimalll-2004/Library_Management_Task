@@ -1,10 +1,10 @@
 from neo4j import GraphDatabase
 from db.db_connection import db
 from db.models import Author, Publisher, Genre, Book, Customer, customer_book
-from sqlalchemy import create_engine  # ✅ fixed typo here
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# create a session (because we're outside Flask)
+# create a session 
 DATABASE_URL = "postgresql://admin:mysecretpassword@localhost:5432/pg-container"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
